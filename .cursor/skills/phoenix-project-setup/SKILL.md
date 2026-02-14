@@ -72,3 +72,14 @@ Replace Phoenix's generated `core_components.ex` with the `daisy_ui_components` 
 8. Remove any stale `<Layouts.flash_group>` calls from templates (e.g., `home.html.heex`) since flash is handled in the app layout
 9. Delete `lib/my_app_web/components/core_components.ex`
 10. Run `mix compile --warnings-as-errors` to verify
+
+## Optional: Add DemoLive page for DaisyUIComponents
+
+Add a demo LiveView that showcases the DaisyUIComponents in action, adapted from the [storybook welcome example](https://github.com/phcurado/daisy_ui_components/blob/main/storybook/storybook/welcome.story.exs) ([live demo](https://daisy-ui-components-site.fly.dev/storybook/welcome)).
+
+1. Create `lib/my_app_web/live/demo_live.ex` and `lib/my_app_web/live/demo_live.html.heex`
+2. The template should exercise a variety of components: navbar, breadcrumbs, stats, card, table, badges, pagination, modal, simple_form, input, button, drawer, menu, dropdown, avatar
+3. Use `@impl Phoenix.LiveView` (not `@impl true`) for callbacks
+4. Add a route in the router: `live "/demo", DemoLive`
+5. Note: check actual slot names in the library source — e.g., navbar uses `:navbar_start`/`:navbar_end` (not `:start`/`:end`), and dropdown uses `inner_block` (not `:trigger`)
+6. Run `mix compile --warnings-as-errors` to verify
