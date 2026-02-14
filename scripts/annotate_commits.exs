@@ -37,16 +37,38 @@ defmodule CommitAnnotator do
   end
 
   def run(opts) do
-    file = opts[:file] || "TRANSCRIPT.md"
+    file = opts[:file]
     IO.puts(yellow() <> "CommitAnnotator: not yet implemented (file: #{file})" <> reset())
+  end
+
+  def usage do
+    IO.puts("""
+
+    #{cyan() <> bright()}Annotate Commits#{reset()} #{faint()}—#{reset()} append chat transcripts to unpushed commit messages
+
+    #{green() <> bright()}USAGE#{reset()}
+      #{cyan()}./scripts/annotate_commits.exs#{reset()} #{yellow()}--file#{reset()} TRANSCRIPT.md   #{faint()}# annotate commits#{reset()}
+      #{cyan()}./scripts/annotate_commits.exs#{reset()} #{yellow()}--test#{reset()}                  #{faint()}# run self-tests#{reset()}
+      #{cyan()}./scripts/annotate_commits.exs#{reset()} #{yellow()}--help#{reset()}                  #{faint()}# show this help#{reset()}
+
+    #{green() <> bright()}OPTIONS#{reset()}
+      #{yellow()}--file#{reset()} FILE   Path to the transcript markdown file #{red()}(required)#{reset()}
+      #{yellow()}--test#{reset()}        Run embedded ExUnit tests
+      #{yellow()}--help#{reset()}        Show this help message
+    """)
   end
 end
 
 {opts, _args, _invalid} =
-  OptionParser.parse(System.argv(), switches: [test: :boolean, file: :string])
+  OptionParser.parse(System.argv(), switches: [test: :boolean, file: :string, help: :boolean])
 
-if opts[:test] do
-  Code.require_file("annotate_commits_test.exs", __DIR__)
-else
-  CommitAnnotator.run(opts)
+cond do
+  opts[:test] ->
+    Code.require_file("annotate_commits_test.exs", __DIR__)
+
+  opts[:file] ->
+    CommitAnnotator.run(opts)
+
+  true ->
+    CommitAnnotator.usage()
 end
