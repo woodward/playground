@@ -41,3 +41,34 @@ Post-generation setup steps to run after `mix phx.new`. Execute these steps in o
 5. Add `"cmd npm i --prefix assets"` to the `assets.setup` alias in `mix.exs`
 6. Ensure `assets/node_modules/` is in `.gitignore` (it should already be)
 7. Commit both `assets/package.json` and `assets/package-lock.json`
+
+## Step 6: Update vendored assets
+
+1. Check the latest versions of `topbar.js` and `heroicons.js` in `assets/vendor/`
+2. Also check if the heroicons tag in `mix.exs` (e.g., `tag: "v2.2.0"`) has a newer release
+3. Update any that are outdated
+
+---
+
+## Optional steps
+
+The following steps are optional enhancements.
+
+## Optional: Replace CoreComponents with DaisyUIComponents
+
+Replace Phoenix's generated `core_components.ex` with the `daisy_ui_components` library (installed as a dependency, not injected).
+
+1. Add `{:daisy_ui_components, "~> 0.9"}` to `mix.exs` (alphabetized)
+2. Run `mix deps.get`
+3. Add to `config/config.exs`:
+   ```elixir
+   config :daisy_ui_components, translate_function: &MyAppWeb.Gettext.translate_error/1
+   ```
+4. Add `@source "../../deps/daisy_ui_components";` in `assets/css/app.css` (after the other `@source` lines)
+5. In `lib/my_app_web.ex`, in the `html_helpers` block:
+   - Replace `import MyAppWeb.CoreComponents` with `use DaisyUIComponents, core_components: true`
+6. Move `translate_error/1` and `translate_errors/2` from `core_components.ex` to the Gettext module (`lib/my_app_web/gettext.ex`)
+7. Remove the local `flash_group/1` definition from `layouts.ex` (the library provides it)
+8. Remove any stale `<Layouts.flash_group>` calls from templates (e.g., `home.html.heex`) since flash is handled in the app layout
+9. Delete `lib/my_app_web/components/core_components.ex`
+10. Run `mix compile --warnings-as-errors` to verify
