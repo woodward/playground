@@ -10,6 +10,8 @@ import Config
 config :playground,
   generators: [timestamp_type: :utc_datetime]
 
+config :daisy_ui_components, translate_function: &PlaygroundWeb.CoreComponents.translate_error/1
+
 # Configure the endpoint
 config :playground, PlaygroundWeb.Endpoint,
   url: [host: "localhost"],

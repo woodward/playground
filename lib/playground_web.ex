@@ -84,8 +84,8 @@ defmodule PlaygroundWeb do
 
       # HTML escaping functionality
       import Phoenix.HTML
-      # Core UI components
-      import PlaygroundWeb.CoreComponents
+      # DaisyUI components (replaces CoreComponents)
+      use DaisyUIComponents, core_components: true
 
       # Common modules used in templates
       alias Phoenix.LiveView.JS
