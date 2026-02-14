@@ -7,22 +7,30 @@ description: Performs post-generation setup steps for a new Phoenix project crea
 
 Post-generation setup steps to run after `mix phx.new`. Execute these steps in order, committing after each step.
 
-## Step 1: Set formatter line length to 120
+## Step 1: Add commit format rule to AGENTS.md
+
+1. Ensure `AGENTS.md` contains the following rule in the Project guidelines section:
+   - After every git commit, always display the result using this exact format:
+     `Committed: \`<short-sha>\` at <YYYY-MM-DD HH:MM:SS> — <commit subject>`
+   - The timestamp comes from `git log -1 --format='%ci'` immediately after the commit
+2. This must be done before any other commits so all transcripts are parseable by the commit annotation script
+
+## Step 2: Set formatter line length to 120
 
 1. In `.formatter.exs`, add `line_length: 120` to the keyword list
 2. Run `mix format` to reformat the entire project with the new line length
 
-## Step 2: Alphabetize mix.exs dependencies
+## Step 3: Alphabetize mix.exs dependencies
 
 1. Sort the dependency tuples in the `deps/0` function in `mix.exs` alphabetically by package name
 
-## Step 3: Update all dependencies
+## Step 4: Update all dependencies
 
 1. Run `mix deps.update --all` to update all mix dependencies
 2. Look up the latest stable versions of **esbuild** and **Tailwind CSS**
 3. Update the `version` values in `config/config.exs` for both `:esbuild` and `:tailwind`
 
-## Step 4: Sync dependency version specs
+## Step 5: Sync dependency version specs
 
 1. Run `mix deps` to see the actual installed versions
 2. Update each dependency in `mix.exs` to:
@@ -30,7 +38,7 @@ Post-generation setup steps to run after `mix phx.new`. Execute these steps in o
    - Match the currently installed minor version (e.g., if `telemetry_poller 1.3.0` is installed, use `"~> 1.3"` not `"~> 1.0"`)
 3. Run `mix deps.get` to verify all deps still resolve cleanly
 
-## Step 5: Replace vendored daisyUI with npm package
+## Step 6: Replace vendored daisyUI with npm package
 
 1. Delete `assets/vendor/daisyui.js` and `assets/vendor/daisyui-theme.js`
 2. Initialize npm in the `assets/` directory if no `package.json` exists: `npm init -y` (run from within `assets/`)
@@ -42,7 +50,7 @@ Post-generation setup steps to run after `mix phx.new`. Execute these steps in o
 6. Ensure `assets/node_modules/` is in `.gitignore` (it should already be)
 7. Commit both `assets/package.json` and `assets/package-lock.json`
 
-## Step 6: Update vendored assets
+## Step 7: Update vendored assets
 
 1. Check the latest versions of `topbar.js` and `heroicons.js` in `assets/vendor/`
 2. Also check if the heroicons tag in `mix.exs` (e.g., `tag: "v2.2.0"`) has a newer release
