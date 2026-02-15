@@ -52,9 +52,76 @@ defmodule CommitAnnotator do
     String.contains?(message, @annotation_marker)
   end
 
+  @doc """
+  Annotates unpushed commits in `repo_dir` with matching chat segments
+  parsed from `transcript_content`. Uses git filter-branch to rewrite
+  commit messages in a single pass.
+  """
+  def annotate_commits(repo_dir, transcript_content) do
+    segments = parse_transcript(transcript_content)
+
+    if segments == [] do
+      IO.puts(yellow() <> "No commit markers found in transcript." <> reset())
+      :ok
+    else
+      # Build a map of short SHA -> annotation text
+      annotations = Map.new(segments, fn segment -> {segment.sha, build_annotation(segment)} end)
+
+      # Write annotation files to a temp directory
+      tmp_dir = Path.join(System.tmp_dir!(), "commit_annotator_#{:erlang.unique_integer([:positive])}")
+      File.mkdir_p!(tmp_dir)
+
+      for {sha, annotation} <- annotations do
+        File.write!(Path.join(tmp_dir, sha), annotation)
+      end
+
+      # Build the msg-filter shell script
+      # GIT_COMMIT holds the original full SHA; we take the first 7 chars
+      msg_filter = """
+      sha=$(echo $GIT_COMMIT | cut -c1-7)
+      msg=$(cat)
+      annotation_file="#{tmp_dir}/$sha"
+      if [ -f "$annotation_file" ]; then
+        if echo "$msg" | grep -q '#{@annotation_marker}'; then
+          echo "$msg"
+        else
+          echo "$msg"
+          cat "$annotation_file"
+        fi
+      else
+        echo "$msg"
+      fi
+      """
+
+      # Run git filter-branch on unpushed commits
+      # @{u} refers to the upstream tracking branch (e.g., origin/main)
+      {output, exit_code} =
+        System.cmd("git", ["filter-branch", "-f", "--msg-filter", msg_filter, "@{u}..HEAD"],
+          cd: repo_dir,
+          stderr_to_stdout: true,
+          env: [{"FILTER_BRANCH_SQUELCH_WARNING", "1"}]
+        )
+
+      # Clean up temp files
+      File.rm_rf!(tmp_dir)
+
+      case exit_code do
+        0 ->
+          IO.puts(green() <> "Successfully annotated commits." <> reset())
+          :ok
+
+        _ ->
+          IO.puts(red() <> "git filter-branch failed (exit #{exit_code}):" <> reset())
+          IO.puts(output)
+          {:error, output}
+      end
+    end
+  end
+
   def run(opts) do
     file = opts[:file]
-    IO.puts(yellow() <> "CommitAnnotator: not yet implemented (file: #{file})" <> reset())
+    content = File.read!(file)
+    annotate_commits(".", content)
   end
 
   def usage do

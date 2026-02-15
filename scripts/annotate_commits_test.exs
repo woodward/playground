@@ -2,6 +2,42 @@ ExUnit.start()
 
 defmodule CommitAnnotatorTest do
   use ExUnit.Case, async: true
+  import ExUnit.CaptureIO
+
+  # Helper to run git commands in a specific directory
+  defp git(repo_dir, args) do
+    {output, 0} = System.cmd("git", args, cd: repo_dir, stderr_to_stdout: true)
+    String.trim(output)
+  end
+
+  # Sets up a git repo with a bare remote and one pushed commit,
+  # returns %{work_dir: ..., bare_dir: ...}
+  defp setup_repo(tmp_dir) do
+    bare_dir = Path.join(tmp_dir, "remote.git")
+    work_dir = Path.join(tmp_dir, "repo")
+
+    System.cmd("git", ["init", "--bare", bare_dir])
+    System.cmd("git", ["clone", bare_dir, work_dir], stderr_to_stdout: true)
+    git(work_dir, ["config", "user.email", "test@test.com"])
+    git(work_dir, ["config", "user.name", "Test User"])
+
+    # Initial commit + push so we have origin/main
+    File.write!(Path.join(work_dir, "README.md"), "# Test")
+    git(work_dir, ["add", "."])
+    git(work_dir, ["commit", "-m", "Initial commit"])
+    git(work_dir, ["push", "-u", "origin", "HEAD"])
+
+    %{work_dir: work_dir, bare_dir: bare_dir}
+  end
+
+  # Gets the short SHA and formatted timestamp for a commit
+  defp commit_info(work_dir, skip \\ 0) do
+    sha = git(work_dir, ["log", "--format=%h", "-1", "--skip=#{skip}"])
+    raw_ts = git(work_dir, ["log", "--format=%ci", "-1", "--skip=#{skip}"])
+    # %ci gives "2026-02-14 16:53:02 -0800", we want just "2026-02-14 16:53:02"
+    timestamp = String.slice(raw_ts, 0, 19)
+    {sha, timestamp}
+  end
 
   describe "parse_transcript/1" do
     test "extracts a single commit segment" do
@@ -123,6 +159,106 @@ defmodule CommitAnnotatorTest do
 
       assert CommitAnnotator.already_annotated?(original)
       refute CommitAnnotator.already_annotated?("Fix a bug\n\nJust a normal message body")
+    end
+  end
+
+  describe "annotate_commits/2 integration" do
+    @tag :tmp_dir
+    test "annotates unpushed commits with matching transcript chat", %{tmp_dir: tmp_dir} do
+      %{work_dir: work_dir} = setup_repo(tmp_dir)
+
+      # Make two unpushed commits
+      File.write!(Path.join(work_dir, "file1.txt"), "hello")
+      git(work_dir, ["add", "."])
+      git(work_dir, ["commit", "-m", "Add file1"])
+
+      File.write!(Path.join(work_dir, "file2.txt"), "world")
+      git(work_dir, ["add", "."])
+      git(work_dir, ["commit", "-m", "Add file2"])
+
+      # Get their SHAs and timestamps (skip=1 is the older one)
+      {sha1, ts1} = commit_info(work_dir, 1)
+      {sha2, ts2} = commit_info(work_dir, 0)
+
+      # Build a transcript referencing both commits
+      transcript = """
+      **User**
+
+      Please add file1
+
+      ---
+
+      **Cursor**
+
+      Added file1.
+
+      Committed: `#{sha1}` at #{ts1} — Add file1
+
+      ---
+
+      **User**
+
+      Now add file2
+
+      ---
+
+      **Cursor**
+
+      Added file2.
+
+      Committed: `#{sha2}` at #{ts2} — Add file2
+      """
+
+      # Run the annotator
+      capture_io(fn -> CommitAnnotator.annotate_commits(work_dir, transcript) end)
+
+      # Verify both commit messages were annotated
+      msg1 = git(work_dir, ["log", "--format=%B", "-1", "--skip=1"])
+      msg2 = git(work_dir, ["log", "--format=%B", "-1"])
+
+      assert msg1 =~ "Add file1"
+      assert msg1 =~ "## Chat Transcript"
+      assert msg1 =~ "Please add file1"
+
+      assert msg2 =~ "Add file2"
+      assert msg2 =~ "## Chat Transcript"
+      assert msg2 =~ "Now add file2"
+    end
+
+    @tag :tmp_dir
+    test "is idempotent — running twice does not double-annotate", %{tmp_dir: tmp_dir} do
+      %{work_dir: work_dir} = setup_repo(tmp_dir)
+
+      # Make one unpushed commit
+      File.write!(Path.join(work_dir, "file1.txt"), "hello")
+      git(work_dir, ["add", "."])
+      git(work_dir, ["commit", "-m", "Add file1"])
+
+      {sha, ts} = commit_info(work_dir)
+
+      transcript = """
+      **User**
+
+      Please add file1
+
+      ---
+
+      **Cursor**
+
+      Added file1.
+
+      Committed: `#{sha}` at #{ts} — Add file1
+      """
+
+      # Run twice
+      capture_io(fn -> CommitAnnotator.annotate_commits(work_dir, transcript) end)
+      capture_io(fn -> CommitAnnotator.annotate_commits(work_dir, transcript) end)
+
+      # Should only have one "## Chat Transcript" marker
+      msg = git(work_dir, ["log", "--format=%B", "-1"])
+      occurrences = msg |> String.split("## Chat Transcript") |> length()
+      # If split produces 2 parts, there's exactly 1 occurrence
+      assert occurrences == 2, "Expected exactly 1 annotation marker, got #{occurrences - 1}"
     end
   end
 end
