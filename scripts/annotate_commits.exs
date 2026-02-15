@@ -36,6 +36,22 @@ defmodule CommitAnnotator do
     end)
   end
 
+  @annotation_marker "## Chat Transcript"
+
+  @doc """
+  Builds the annotation text to append to a commit message.
+  """
+  def build_annotation(%{conversation: conversation}) do
+    "\n\n---\n\n#{@annotation_marker}\n\n#{conversation}"
+  end
+
+  @doc """
+  Returns true if a commit message has already been annotated.
+  """
+  def already_annotated?(message) do
+    String.contains?(message, @annotation_marker)
+  end
+
   def run(opts) do
     file = opts[:file]
     IO.puts(yellow() <> "CommitAnnotator: not yet implemented (file: #{file})" <> reset())

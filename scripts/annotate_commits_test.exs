@@ -98,4 +98,31 @@ defmodule CommitAnnotatorTest do
       assert CommitAnnotator.parse_transcript(transcript) == []
     end
   end
+
+  describe "build_annotation/1" do
+    test "formats a segment as a commit message annotation" do
+      segment = %{
+        sha: "abc1234",
+        timestamp: "2026-02-14 13:15:32",
+        subject: "Alphabetize dependencies",
+        conversation: "**User**\n\nCan you alphabetize?\n\n---\n\n**Cursor**\n\nDone!"
+      }
+
+      annotation = CommitAnnotator.build_annotation(segment)
+
+      assert annotation =~ "---"
+      assert annotation =~ "## Chat Transcript"
+      assert annotation =~ "Can you alphabetize?"
+      assert annotation =~ "Done!"
+      # Should start with blank line + hr + blank line + heading
+      assert String.starts_with?(annotation, "\n\n---\n\n## Chat Transcript\n\n")
+    end
+
+    test "idempotency check detects already-annotated message" do
+      original = "Fix a bug\n\n---\n\n## Chat Transcript\n\nSome chat here"
+
+      assert CommitAnnotator.already_annotated?(original)
+      refute CommitAnnotator.already_annotated?("Fix a bug\n\nJust a normal message body")
+    end
+  end
 end
