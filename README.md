@@ -11,6 +11,14 @@ A Phoenix project that served as a sandbox for building two reusable tools with 
 
 A reusable [Cursor AI skill](https://docs.cursor.com/context/skills) that automates the repetitive post-`mix phx.new` setup steps: formatter config, dependency updates, CSS/JS asset wiring, optional DaisyUI and PhoenixTest integration, and more. Each step is designed to be committed individually for a clean git history.
 
+## Commit Format Rule
+
+`AGENTS.md`
+
+The annotation script depends on commit markers appearing in the chat transcript. To make this happen, we added a rule to `AGENTS.md` that instructs Cursor to print a standardized line after every git commit: `Committed: \`<sha>\` at <timestamp> — <subject>`. When the conversation is exported to a transcript file, these markers become the anchors that the annotation script uses to match chat segments to their corresponding commits. This creates a feedback loop: the AI follows the rule, the transcript captures the markers, and the script stitches it all together.
+
+For shared projects where modifying the top-level `AGENTS.md` isn't an option, you can add the same rule to `AGENTS.local.md` instead (which is typically gitignored and personal to you).
+
 ## Commit Annotation Script
 
 `scripts/annotate_commits.exs`
