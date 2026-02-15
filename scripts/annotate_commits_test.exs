@@ -10,9 +10,10 @@ defmodule CommitAnnotatorTest do
     String.trim(output)
   end
 
-  # Sets up a git repo with a bare remote and one pushed commit,
-  # returns %{work_dir: ..., bare_dir: ...}
-  defp setup_repo(tmp_dir) do
+  # Sets up a git repo with a bare remote and one pushed commit.
+  # Used as an ExUnit setup callback: receives context with :tmp_dir,
+  # returns [work_dir: work_dir] to merge into the test context.
+  defp setup_repo(%{tmp_dir: tmp_dir}) do
     bare_dir = Path.join(tmp_dir, "remote.git")
     work_dir = Path.join(tmp_dir, "repo")
 
@@ -27,7 +28,7 @@ defmodule CommitAnnotatorTest do
     git(work_dir, ["commit", "-m", "Initial commit"])
     git(work_dir, ["push", "-u", "origin", "HEAD"])
 
-    %{work_dir: work_dir, bare_dir: bare_dir}
+    [work_dir: work_dir]
   end
 
   # Gets the short SHA and formatted timestamp for a commit
@@ -163,9 +164,10 @@ defmodule CommitAnnotatorTest do
   end
 
   describe "annotate_commits/2 integration" do
+    setup :setup_repo
+
     @tag :tmp_dir
-    test "annotates unpushed commits with matching transcript chat", %{tmp_dir: tmp_dir} do
-      %{work_dir: work_dir} = setup_repo(tmp_dir)
+    test "annotates unpushed commits with matching transcript chat", %{work_dir: work_dir} do
 
       # Make two unpushed commits
       File.write!(Path.join(work_dir, "file1.txt"), "hello")
@@ -226,8 +228,7 @@ defmodule CommitAnnotatorTest do
     end
 
     @tag :tmp_dir
-    test "dry run shows what would be annotated without modifying commits", %{tmp_dir: tmp_dir} do
-      %{work_dir: work_dir} = setup_repo(tmp_dir)
+    test "dry run shows what would be annotated without modifying commits", %{work_dir: work_dir} do
 
       # Make one unpushed commit
       File.write!(Path.join(work_dir, "file1.txt"), "hello")
@@ -264,8 +265,7 @@ defmodule CommitAnnotatorTest do
     end
 
     @tag :tmp_dir
-    test "is idempotent — running twice does not double-annotate", %{tmp_dir: tmp_dir} do
-      %{work_dir: work_dir} = setup_repo(tmp_dir)
+    test "is idempotent — running twice does not double-annotate", %{work_dir: work_dir} do
 
       # Make one unpushed commit
       File.write!(Path.join(work_dir, "file1.txt"), "hello")
@@ -300,8 +300,7 @@ defmodule CommitAnnotatorTest do
     end
 
     @tag :tmp_dir
-    test "prints summary with matched and unmatched commit counts", %{tmp_dir: tmp_dir} do
-      %{work_dir: work_dir} = setup_repo(tmp_dir)
+    test "prints summary with matched and unmatched commit counts", %{work_dir: work_dir} do
 
       # Make three unpushed commits, but only two will have transcript markers
       File.write!(Path.join(work_dir, "file1.txt"), "hello")
