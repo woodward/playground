@@ -81,6 +81,19 @@ Replace Phoenix's generated `core_components.ex` with the `daisy_ui_components` 
 9. Delete `lib/my_app_web/components/core_components.ex`
 10. Run `mix compile --warnings-as-errors` to verify
 
+## Optional: Add PhoenixTest for feature testing
+
+Add [PhoenixTest](https://github.com/germsvel/phoenix_test) for a unified way of writing feature tests for both LiveView and static pages.
+
+1. Add `{:phoenix_test, "~> 0.9", only: :test, runtime: false}` to `mix.exs` (alphabetized)
+2. Run `mix deps.get`
+3. Add to `config/test.exs`:
+   ```elixir
+   config :phoenix_test, :endpoint, MyAppWeb.Endpoint
+   ```
+4. Add `import PhoenixTest` to the `using` block in `test/support/conn_case.ex`
+5. Run `mix compile --warnings-as-errors` to verify
+
 ## Optional: Add DemoLive page for DaisyUIComponents
 
 Add a demo LiveView that showcases the DaisyUIComponents in action, adapted from the [storybook welcome example](https://github.com/phcurado/daisy_ui_components/blob/main/storybook/storybook/welcome.story.exs) ([live demo](https://daisy-ui-components-site.fly.dev/storybook/welcome)).

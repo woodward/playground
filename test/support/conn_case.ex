@@ -27,6 +27,7 @@ defmodule PlaygroundWeb.ConnCase do
       # Import conveniences for testing with connections
       import Plug.Conn
       import Phoenix.ConnTest
+      import PhoenixTest
       import PlaygroundWeb.ConnCase
     end
   end
