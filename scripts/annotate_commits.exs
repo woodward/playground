@@ -53,9 +53,94 @@ defmodule CommitAnnotator do
   end
 
   @doc """
-  Annotates unpushed commits in `repo_dir` with matching chat segments
-  parsed from `transcript_content`. Uses git filter-branch to rewrite
-  commit messages in a single pass.
+  Lists commits as `{sha, subject}` tuples. When `force` is true, lists
+  all commits; otherwise only unpushed commits relative to the upstream.
+  """
+  def list_commits(repo_dir, force) do
+    log_range = if force, do: "HEAD", else: "@{u}..HEAD"
+
+    {log_output, exit_code} =
+      System.cmd("git", ["log", "--format=%h %s", log_range], cd: repo_dir, stderr_to_stdout: true)
+
+    if exit_code == 0 do
+      log_output
+      |> String.trim()
+      |> String.split("\n", trim: true)
+      |> Enum.map(fn line ->
+        [sha | rest] = String.split(line, " ", parts: 2)
+        {sha, Enum.at(rest, 0, "")}
+      end)
+    else
+      []
+    end
+  end
+
+  # Prints a summary of matched and unmatched commits.
+  defp print_summary(matches, unmatched_count, scope_label) do
+    for {sha, subject} <- matches do
+      IO.puts("  #{green()}#{sha}#{reset()} — #{subject}")
+    end
+
+    if unmatched_count > 0 do
+      IO.puts(faint() <> "#{unmatched_count} #{scope_label} had no matching transcript marker." <> reset())
+    end
+  end
+
+  # Runs git filter-branch to rewrite commit messages, appending annotation
+  # text from the given map. Returns `:ok` or `{:error, output}`.
+  defp run_filter_branch(repo_dir, annotations, force) do
+    tmp_dir = Path.join(System.tmp_dir!(), "commit_annotator_#{:erlang.unique_integer([:positive])}")
+    File.mkdir_p!(tmp_dir)
+
+    for {sha, annotation} <- annotations do
+      File.write!(Path.join(tmp_dir, sha), annotation)
+    end
+
+    # GIT_COMMIT holds the original full SHA; we take the first 7 chars
+    msg_filter = """
+    sha=$(echo $GIT_COMMIT | cut -c1-7)
+    msg=$(cat)
+    annotation_file="#{tmp_dir}/$sha"
+    if [ -f "$annotation_file" ]; then
+      if echo "$msg" | grep -q '#{@annotation_marker}'; then
+        echo "$msg"
+      else
+        echo "$msg"
+        cat "$annotation_file"
+      fi
+    else
+      echo "$msg"
+    fi
+    """
+
+    filter_range = if force, do: "HEAD", else: "@{u}..HEAD"
+
+    {output, exit_code} =
+      System.cmd("git", ["filter-branch", "-f", "--msg-filter", msg_filter, filter_range],
+        cd: repo_dir,
+        stderr_to_stdout: true,
+        env: [{"FILTER_BRANCH_SQUELCH_WARNING", "1"}]
+      )
+
+    File.rm_rf!(tmp_dir)
+
+    case exit_code do
+      0 -> :ok
+      _ ->
+        IO.puts(red() <> "git filter-branch failed (exit #{exit_code}):" <> reset())
+        IO.puts(output)
+        {:error, output}
+    end
+  end
+
+  @doc """
+  Annotates commits in `repo_dir` with matching chat segments parsed from
+  `transcript_content`. Uses git filter-branch to rewrite commit messages
+  in a single pass.
+
+  Options:
+    - `:dry_run` — preview without modifying (default: false)
+    - `:force` — include already-pushed commits (default: false)
   """
   def annotate_commits(repo_dir, transcript_content, opts \\ []) do
     dry_run = Keyword.get(opts, :dry_run, false)
@@ -75,35 +160,10 @@ defmodule CommitAnnotator do
       IO.puts(yellow() <> "No commit markers found in transcript." <> reset())
       :ok
     else
-      # Build a map of short SHA -> annotation text
       annotations = Map.new(segments, fn segment -> {segment.sha, build_annotation(segment)} end)
-
-      # Get commit SHAs to cross-reference
-      # In force mode, use all commits; otherwise only unpushed commits
-      log_range = if force, do: "HEAD", else: "@{u}..HEAD"
-
-      {log_output, exit_code} =
-        System.cmd("git", ["log", "--format=%h %s", log_range], cd: repo_dir, stderr_to_stdout: true)
-
-      commits =
-        if exit_code == 0 do
-          log_output
-          |> String.trim()
-          |> String.split("\n", trim: true)
-          |> Enum.map(fn line ->
-            [sha | rest] = String.split(line, " ", parts: 2)
-            {sha, Enum.at(rest, 0, "")}
-          end)
-        else
-          []
-        end
-
-      # Find which commits have matching annotations
-      matches =
-        Enum.filter(commits, fn {sha, _subject} -> Map.has_key?(annotations, sha) end)
-
+      commits = list_commits(repo_dir, force)
+      matches = Enum.filter(commits, fn {sha, _} -> Map.has_key?(annotations, sha) end)
       unmatched_count = length(commits) - length(matches)
-
       scope_label = if force, do: "commit(s)", else: "unpushed commit(s)"
 
       cond do
@@ -113,77 +173,18 @@ defmodule CommitAnnotator do
 
         dry_run ->
           IO.puts(cyan() <> bright() <> "dry run: would annotate #{length(matches)} commit(s):" <> reset())
-
-          for {sha, subject} <- matches do
-            IO.puts("  #{green()}#{sha}#{reset()} — #{subject}")
-          end
-
-          if unmatched_count > 0 do
-            IO.puts(faint() <> "#{unmatched_count} #{scope_label} had no matching transcript marker." <> reset())
-          end
-
+          print_summary(matches, unmatched_count, scope_label)
           :dry_run
 
         true ->
-          # Write annotation files to a temp directory
-          tmp_dir = Path.join(System.tmp_dir!(), "commit_annotator_#{:erlang.unique_integer([:positive])}")
-          File.mkdir_p!(tmp_dir)
-
-          for {sha, annotation} <- annotations do
-            File.write!(Path.join(tmp_dir, sha), annotation)
-          end
-
-          # Build the msg-filter shell script
-          # GIT_COMMIT holds the original full SHA; we take the first 7 chars
-          msg_filter = """
-          sha=$(echo $GIT_COMMIT | cut -c1-7)
-          msg=$(cat)
-          annotation_file="#{tmp_dir}/$sha"
-          if [ -f "$annotation_file" ]; then
-            if echo "$msg" | grep -q '#{@annotation_marker}'; then
-              echo "$msg"
-            else
-              echo "$msg"
-              cat "$annotation_file"
-            fi
-          else
-            echo "$msg"
-          fi
-          """
-
-          # Run git filter-branch on the appropriate commit range
-          filter_range = if force, do: "HEAD", else: "@{u}..HEAD"
-
-          {output, exit_code} =
-            System.cmd("git", ["filter-branch", "-f", "--msg-filter", msg_filter, filter_range],
-              cd: repo_dir,
-              stderr_to_stdout: true,
-              env: [{"FILTER_BRANCH_SQUELCH_WARNING", "1"}]
-            )
-
-          # Clean up temp files
-          File.rm_rf!(tmp_dir)
-
-          case exit_code do
-            0 ->
+          case run_filter_branch(repo_dir, annotations, force) do
+            :ok ->
               IO.puts(green() <> "Annotated #{length(matches)} commit(s)." <> reset())
-
-              for {sha, subject} <- matches do
-                IO.puts("  #{green()}#{sha}#{reset()} — #{subject}")
-              end
-
-              if unmatched_count > 0 do
-                IO.puts(
-                  faint() <> "#{unmatched_count} #{scope_label} had no matching transcript marker." <> reset()
-                )
-              end
-
+              print_summary(matches, unmatched_count, scope_label)
               :ok
 
-            _ ->
-              IO.puts(red() <> "git filter-branch failed (exit #{exit_code}):" <> reset())
-              IO.puts(output)
-              {:error, output}
+            error ->
+              error
           end
       end
     end
@@ -216,6 +217,8 @@ defmodule CommitAnnotator do
     """)
   end
 end
+
+# --------------------------------------------------------------------------------------------------
 
 {opts, _args, _invalid} =
   OptionParser.parse(System.argv(),
