@@ -356,5 +356,76 @@ defmodule CommitAnnotatorTest do
       # Should show how many unpushed had no match
       assert output =~ "1 unpushed commit(s) had no matching transcript marker"
     end
+
+    @tag :tmp_dir
+    test "default mode skips already-pushed commits", %{work_dir: work_dir} do
+      # Make a commit and push it
+      File.write!(Path.join(work_dir, "file1.txt"), "hello")
+      git(work_dir, ["add", "."])
+      git(work_dir, ["commit", "-m", "Add file1"])
+      git(work_dir, ["push"])
+
+      {sha, ts} = commit_info(work_dir)
+
+      transcript = """
+      **User**
+
+      Please add file1
+
+      ---
+
+      **Cursor**
+
+      Added file1.
+
+      Committed: `#{sha}` at #{ts} — Add file1
+      """
+
+      output = capture_io(fn -> CommitAnnotator.annotate_commits(work_dir, transcript) end)
+
+      # Should find no matches since the commit is already pushed
+      assert output =~ "No matching commits"
+
+      # Commit message should NOT have been modified
+      msg = git(work_dir, ["log", "--format=%B", "-1"])
+      refute msg =~ "## Chat Transcript"
+    end
+
+    @tag :tmp_dir
+    test "force mode annotates already-pushed commits", %{work_dir: work_dir} do
+      # Make a commit and push it
+      File.write!(Path.join(work_dir, "file1.txt"), "hello")
+      git(work_dir, ["add", "."])
+      git(work_dir, ["commit", "-m", "Add file1"])
+      git(work_dir, ["push"])
+
+      {sha, ts} = commit_info(work_dir)
+
+      transcript = """
+      **User**
+
+      Please add file1
+
+      ---
+
+      **Cursor**
+
+      Added file1.
+
+      Committed: `#{sha}` at #{ts} — Add file1
+      """
+
+      output = capture_io(fn -> CommitAnnotator.annotate_commits(work_dir, transcript, force: true) end)
+
+      # Should warn about force mode
+      assert output =~ "force"
+      # Should show it annotated a commit
+      assert output =~ "Annotated 1"
+
+      # Commit message should have the annotation
+      msg = git(work_dir, ["log", "--format=%B", "-1"])
+      assert msg =~ "## Chat Transcript"
+      assert msg =~ "Please add file1"
+    end
   end
 end
