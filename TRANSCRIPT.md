@@ -1,5 +1,5 @@
 # Initial commit for Phoenix project
-_Exported on 2/15/2026 at 06:49:59 PST from Cursor (2.4.37)_
+_Exported on 2/15/2026 at 06:52:25 PST from Cursor (2.4.37)_
 
 ---
 
@@ -3058,4 +3058,46 @@ ok, one last thing for today: I'm going to export a fresh copy of the TRANSCRIPT
 **Cursor**
 
 Sounds great — export the fresh transcript and let me know when it's ready. We'll do the dry run first to preview, then the real thing.
+
+---
+
+**User**
+
+I've exported the fresh transcript; let's commit it first
+
+---
+
+**Cursor**
+
+Committed: `ab9d0b9` at 2026-02-15 06:50:54 — Update session transcript with latest conversation export
+
+Ready for dry run when you are. Want me to run it?
+
+---
+
+**User**
+
+yes, please do the dry run
+
+---
+
+**Cursor**
+
+Looks good. It found 20 segments in the transcript, and 6 of the 11 unpushed commits have matching markers. The 5 unmatched ones are likely commits that were made before the commit format rule was in place, or the transcript commit itself (which wouldn't have a marker for its own SHA).
+
+Ready to run it for real?
+
+---
+
+**User**
+
+yes, let's run it for real!
+
+---
+
+**Cursor**
+
+Successfully annotated 6 commits. Let's verify one of them to make sure the chat transcript was appended properly.
+
+It worked perfectly. The commit message has the original subject, then the `---` divider, the `## Chat Transcript` heading, and the relevant conversation context. Note that the SHAs have changed (e.g., `82287a2` is now `f585ce2`) since `git filter-branch` rewrites history — that's expected and is also what makes the script idempotent.
 
