@@ -61,6 +61,8 @@ defmodule CommitAnnotator do
     dry_run = Keyword.get(opts, :dry_run, false)
     segments = parse_transcript(transcript_content)
 
+    IO.puts(faint() <> "Parsed #{length(segments)} segment(s) from transcript." <> reset())
+
     if segments == [] do
       IO.puts(yellow() <> "No commit markers found in transcript." <> reset())
       :ok
@@ -85,6 +87,8 @@ defmodule CommitAnnotator do
       matches =
         Enum.filter(unpushed, fn {sha, _subject} -> Map.has_key?(annotations, sha) end)
 
+      unmatched_count = length(unpushed) - length(matches)
+
       if dry_run do
         if matches == [] do
           IO.puts(yellow() <> "dry run: no matching commits to annotate." <> reset())
@@ -94,6 +98,10 @@ defmodule CommitAnnotator do
           for {sha, subject} <- matches do
             IO.puts("  #{green()}#{sha}#{reset()} — #{subject}")
           end
+        end
+
+        if unmatched_count > 0 do
+          IO.puts(faint() <> "#{unmatched_count} unpushed commit(s) had no matching transcript marker." <> reset())
         end
 
         :dry_run
@@ -138,7 +146,18 @@ defmodule CommitAnnotator do
 
         case exit_code do
           0 ->
-            IO.puts(green() <> "Successfully annotated commits." <> reset())
+            IO.puts(green() <> "Annotated #{length(matches)} commit(s)." <> reset())
+
+            for {sha, subject} <- matches do
+              IO.puts("  #{green()}#{sha}#{reset()} — #{subject}")
+            end
+
+            if unmatched_count > 0 do
+              IO.puts(
+                faint() <> "#{unmatched_count} unpushed commit(s) had no matching transcript marker." <> reset()
+              )
+            end
+
             :ok
 
           _ ->

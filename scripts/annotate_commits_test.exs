@@ -298,5 +298,64 @@ defmodule CommitAnnotatorTest do
       # If split produces 2 parts, there's exactly 1 occurrence
       assert occurrences == 2, "Expected exactly 1 annotation marker, got #{occurrences - 1}"
     end
+
+    @tag :tmp_dir
+    test "prints summary with matched and unmatched commit counts", %{tmp_dir: tmp_dir} do
+      %{work_dir: work_dir} = setup_repo(tmp_dir)
+
+      # Make three unpushed commits, but only two will have transcript markers
+      File.write!(Path.join(work_dir, "file1.txt"), "hello")
+      git(work_dir, ["add", "."])
+      git(work_dir, ["commit", "-m", "Add file1"])
+
+      File.write!(Path.join(work_dir, "file2.txt"), "world")
+      git(work_dir, ["add", "."])
+      git(work_dir, ["commit", "-m", "Add file2"])
+
+      File.write!(Path.join(work_dir, "file3.txt"), "no marker for this one")
+      git(work_dir, ["add", "."])
+      git(work_dir, ["commit", "-m", "Add file3"])
+
+      # Only get SHAs for first two commits (skip=2 and skip=1)
+      {sha1, ts1} = commit_info(work_dir, 2)
+      {sha2, ts2} = commit_info(work_dir, 1)
+
+      transcript = """
+      **User**
+
+      Please add file1
+
+      ---
+
+      **Cursor**
+
+      Added file1.
+
+      Committed: `#{sha1}` at #{ts1} — Add file1
+
+      ---
+
+      **User**
+
+      Now add file2
+
+      ---
+
+      **Cursor**
+
+      Added file2.
+
+      Committed: `#{sha2}` at #{ts2} — Add file2
+      """
+
+      output = capture_io(fn -> CommitAnnotator.annotate_commits(work_dir, transcript) end)
+
+      # Should show parsed segment count
+      assert output =~ "2 segment(s)"
+      # Should show how many were annotated
+      assert output =~ "Annotated 2"
+      # Should show how many unpushed had no match
+      assert output =~ "1 unpushed commit(s) had no matching transcript marker"
+    end
   end
 end
