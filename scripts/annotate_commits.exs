@@ -57,7 +57,8 @@ defmodule CommitAnnotator do
   parsed from `transcript_content`. Uses git filter-branch to rewrite
   commit messages in a single pass.
   """
-  def annotate_commits(repo_dir, transcript_content) do
+  def annotate_commits(repo_dir, transcript_content, opts \\ []) do
+    dry_run = Keyword.get(opts, :dry_run, false)
     segments = parse_transcript(transcript_content)
 
     if segments == [] do
@@ -67,53 +68,84 @@ defmodule CommitAnnotator do
       # Build a map of short SHA -> annotation text
       annotations = Map.new(segments, fn segment -> {segment.sha, build_annotation(segment)} end)
 
-      # Write annotation files to a temp directory
-      tmp_dir = Path.join(System.tmp_dir!(), "commit_annotator_#{:erlang.unique_integer([:positive])}")
-      File.mkdir_p!(tmp_dir)
+      # Get unpushed commit SHAs to cross-reference
+      {log_output, 0} =
+        System.cmd("git", ["log", "--format=%h %s", "@{u}..HEAD"], cd: repo_dir, stderr_to_stdout: true)
 
-      for {sha, annotation} <- annotations do
-        File.write!(Path.join(tmp_dir, sha), annotation)
-      end
+      unpushed =
+        log_output
+        |> String.trim()
+        |> String.split("\n", trim: true)
+        |> Enum.map(fn line ->
+          [sha | rest] = String.split(line, " ", parts: 2)
+          {sha, Enum.at(rest, 0, "")}
+        end)
 
-      # Build the msg-filter shell script
-      # GIT_COMMIT holds the original full SHA; we take the first 7 chars
-      msg_filter = """
-      sha=$(echo $GIT_COMMIT | cut -c1-7)
-      msg=$(cat)
-      annotation_file="#{tmp_dir}/$sha"
-      if [ -f "$annotation_file" ]; then
-        if echo "$msg" | grep -q '#{@annotation_marker}'; then
-          echo "$msg"
+      # Find which unpushed commits have matching annotations
+      matches =
+        Enum.filter(unpushed, fn {sha, _subject} -> Map.has_key?(annotations, sha) end)
+
+      if dry_run do
+        if matches == [] do
+          IO.puts(yellow() <> "dry run: no matching commits to annotate." <> reset())
+        else
+          IO.puts(cyan() <> bright() <> "dry run: would annotate #{length(matches)} commit(s):" <> reset())
+
+          for {sha, subject} <- matches do
+            IO.puts("  #{green()}#{sha}#{reset()} — #{subject}")
+          end
+        end
+
+        :dry_run
+      else
+        # Write annotation files to a temp directory
+        tmp_dir = Path.join(System.tmp_dir!(), "commit_annotator_#{:erlang.unique_integer([:positive])}")
+        File.mkdir_p!(tmp_dir)
+
+        for {sha, annotation} <- annotations do
+          File.write!(Path.join(tmp_dir, sha), annotation)
+        end
+
+        # Build the msg-filter shell script
+        # GIT_COMMIT holds the original full SHA; we take the first 7 chars
+        msg_filter = """
+        sha=$(echo $GIT_COMMIT | cut -c1-7)
+        msg=$(cat)
+        annotation_file="#{tmp_dir}/$sha"
+        if [ -f "$annotation_file" ]; then
+          if echo "$msg" | grep -q '#{@annotation_marker}'; then
+            echo "$msg"
+          else
+            echo "$msg"
+            cat "$annotation_file"
+          fi
         else
           echo "$msg"
-          cat "$annotation_file"
         fi
-      else
-        echo "$msg"
-      fi
-      """
+        """
 
-      # Run git filter-branch on unpushed commits
-      # @{u} refers to the upstream tracking branch (e.g., origin/main)
-      {output, exit_code} =
-        System.cmd("git", ["filter-branch", "-f", "--msg-filter", msg_filter, "@{u}..HEAD"],
-          cd: repo_dir,
-          stderr_to_stdout: true,
-          env: [{"FILTER_BRANCH_SQUELCH_WARNING", "1"}]
-        )
+        # Run git filter-branch on unpushed commits
+        # @{u} refers to the upstream tracking branch (e.g., origin/main)
+        {output, exit_code} =
+          System.cmd("git", ["filter-branch", "-f", "--msg-filter", msg_filter, "@{u}..HEAD"],
+            cd: repo_dir,
+            stderr_to_stdout: true,
+            env: [{"FILTER_BRANCH_SQUELCH_WARNING", "1"}]
+          )
 
-      # Clean up temp files
-      File.rm_rf!(tmp_dir)
+        # Clean up temp files
+        File.rm_rf!(tmp_dir)
 
-      case exit_code do
-        0 ->
-          IO.puts(green() <> "Successfully annotated commits." <> reset())
-          :ok
+        case exit_code do
+          0 ->
+            IO.puts(green() <> "Successfully annotated commits." <> reset())
+            :ok
 
-        _ ->
-          IO.puts(red() <> "git filter-branch failed (exit #{exit_code}):" <> reset())
-          IO.puts(output)
-          {:error, output}
+          _ ->
+            IO.puts(red() <> "git filter-branch failed (exit #{exit_code}):" <> reset())
+            IO.puts(output)
+            {:error, output}
+        end
       end
     end
   end
@@ -121,7 +153,7 @@ defmodule CommitAnnotator do
   def run(opts) do
     file = opts[:file]
     content = File.read!(file)
-    annotate_commits(".", content)
+    annotate_commits(".", content, dry_run: opts[:dry_run] || false)
   end
 
   def usage do
@@ -131,11 +163,13 @@ defmodule CommitAnnotator do
 
     #{green() <> bright()}USAGE#{reset()}
       #{cyan()}./scripts/annotate_commits.exs#{reset()} #{yellow()}--file#{reset()} TRANSCRIPT.md   #{faint()}# annotate commits#{reset()}
+      #{cyan()}./scripts/annotate_commits.exs#{reset()} #{yellow()}--file#{reset()} TRANSCRIPT.md #{yellow()}--dry-run#{reset()}   #{faint()}# preview only#{reset()}
       #{cyan()}./scripts/annotate_commits.exs#{reset()} #{yellow()}--test#{reset()}                  #{faint()}# run self-tests#{reset()}
       #{cyan()}./scripts/annotate_commits.exs#{reset()} #{yellow()}--help#{reset()}                  #{faint()}# show this help#{reset()}
 
     #{green() <> bright()}OPTIONS#{reset()}
       #{yellow()}--file#{reset()} FILE   Path to the transcript markdown file #{red()}(required)#{reset()}
+      #{yellow()}--dry-run#{reset()}     Preview which commits would be annotated without modifying them
       #{yellow()}--test#{reset()}        Run embedded ExUnit tests
       #{yellow()}--help#{reset()}        Show this help message
     """)
@@ -143,7 +177,7 @@ defmodule CommitAnnotator do
 end
 
 {opts, _args, _invalid} =
-  OptionParser.parse(System.argv(), switches: [test: :boolean, file: :string, help: :boolean])
+  OptionParser.parse(System.argv(), switches: [test: :boolean, file: :string, help: :boolean, dry_run: :boolean])
 
 script_path = __ENV__.file
 test_file = String.replace_trailing(script_path, ".exs", "_test.exs")

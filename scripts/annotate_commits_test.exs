@@ -226,6 +226,44 @@ defmodule CommitAnnotatorTest do
     end
 
     @tag :tmp_dir
+    test "dry run shows what would be annotated without modifying commits", %{tmp_dir: tmp_dir} do
+      %{work_dir: work_dir} = setup_repo(tmp_dir)
+
+      # Make one unpushed commit
+      File.write!(Path.join(work_dir, "file1.txt"), "hello")
+      git(work_dir, ["add", "."])
+      git(work_dir, ["commit", "-m", "Add file1"])
+
+      {sha, ts} = commit_info(work_dir)
+
+      transcript = """
+      **User**
+
+      Please add file1
+
+      ---
+
+      **Cursor**
+
+      Added file1.
+
+      Committed: `#{sha}` at #{ts} — Add file1
+      """
+
+      # Run in dry-run mode
+      output = capture_io(fn -> CommitAnnotator.annotate_commits(work_dir, transcript, dry_run: true) end)
+
+      # Should mention the commit that would be annotated
+      assert output =~ sha
+      assert output =~ "Add file1"
+      assert output =~ "dry run"
+
+      # Commit message should NOT have been modified
+      msg = git(work_dir, ["log", "--format=%B", "-1"])
+      refute msg =~ "## Chat Transcript"
+    end
+
+    @tag :tmp_dir
     test "is idempotent — running twice does not double-annotate", %{tmp_dir: tmp_dir} do
       %{work_dir: work_dir} = setup_repo(tmp_dir)
 
