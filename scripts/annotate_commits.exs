@@ -62,9 +62,18 @@ end
 {opts, _args, _invalid} =
   OptionParser.parse(System.argv(), switches: [test: :boolean, file: :string, help: :boolean])
 
+script_path = __ENV__.file
+test_file = String.replace_trailing(script_path, ".exs", "_test.exs")
+
 cond do
   opts[:test] ->
-    Code.require_file("annotate_commits_test.exs", __DIR__)
+    if File.exists?(test_file) do
+      Code.require_file(test_file)
+    else
+      IO.puts(IO.ANSI.red() <> "Error: test file not found at #{test_file}" <> IO.ANSI.reset())
+      IO.puts("Expected sibling file: #{Path.basename(test_file)} in the same directory as this script.")
+      System.halt(1)
+    end
 
   opts[:file] ->
     CommitAnnotator.run(opts)
