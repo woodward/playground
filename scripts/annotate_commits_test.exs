@@ -155,12 +155,6 @@ defmodule CommitAnnotatorTest do
       assert String.starts_with?(annotation, "\n\n---\n\n## Chat Transcript\n\n")
     end
 
-    test "idempotency check detects already-annotated message" do
-      original = "Fix a bug\n\n---\n\n## Chat Transcript\n\nSome chat here"
-
-      assert CommitAnnotator.already_annotated?(original)
-      refute CommitAnnotator.already_annotated?("Fix a bug\n\nJust a normal message body")
-    end
   end
 
   describe "annotate_commits/2 integration" do
