@@ -386,12 +386,13 @@ defmodule CommitAnnotatorTest do
     end
 
     @tag :tmp_dir
-    test "force mode annotates already-pushed commits", %{work_dir: work_dir} do
-      # Make a commit and push it
+    test "force mode annotates already-pushed commits on a feature branch", %{work_dir: work_dir} do
+      # Create a feature branch, make a commit, and push it
+      git(work_dir, ["checkout", "-b", "feature/force-test"])
       File.write!(Path.join(work_dir, "file1.txt"), "hello")
       git(work_dir, ["add", "."])
       git(work_dir, ["commit", "-m", "Add file1"])
-      git(work_dir, ["push"])
+      git(work_dir, ["push", "-u", "origin", "feature/force-test"])
 
       {sha, ts} = commit_info(work_dir)
 
@@ -420,6 +421,98 @@ defmodule CommitAnnotatorTest do
       msg = git(work_dir, ["log", "--format=%B", "-1"])
       assert msg =~ "## Chat Transcript"
       assert msg =~ "Please add file1"
+    end
+
+    @tag :tmp_dir
+    test "annotates commits on a local branch with no upstream", %{work_dir: work_dir} do
+      # Create a new branch without pushing (no upstream tracking)
+      git(work_dir, ["checkout", "-b", "feature/no-upstream"])
+
+      File.write!(Path.join(work_dir, "feature.txt"), "new feature")
+      git(work_dir, ["add", "."])
+      git(work_dir, ["commit", "-m", "Add feature"])
+
+      {sha, ts} = commit_info(work_dir)
+
+      transcript = """
+      **User**
+
+      Please add the feature
+
+      ---
+
+      **Cursor**
+
+      Added the feature.
+
+      Committed: `#{sha}` at #{ts} — Add feature
+      """
+
+      output = capture_io(fn -> CommitAnnotator.annotate_commits(work_dir, transcript) end)
+
+      # Should find and annotate the commit even without an upstream
+      assert output =~ "Annotated 1"
+
+      msg = git(work_dir, ["log", "--format=%B", "-1"])
+      assert msg =~ "## Chat Transcript"
+      assert msg =~ "Please add the feature"
+    end
+
+    @tag :tmp_dir
+    test "handles abbreviated SHAs longer than 7 characters", %{work_dir: work_dir} do
+      # Force 8-character abbreviated SHAs (matches repos with many objects)
+      git(work_dir, ["config", "core.abbrev", "8"])
+
+      File.write!(Path.join(work_dir, "file1.txt"), "hello")
+      git(work_dir, ["add", "."])
+      git(work_dir, ["commit", "-m", "Add file1"])
+
+      {sha, ts} = commit_info(work_dir)
+      assert String.length(sha) == 8, "Expected 8-char SHA, got #{String.length(sha)}: #{sha}"
+
+      transcript = """
+      **User**
+
+      Please add file1
+
+      ---
+
+      **Cursor**
+
+      Added file1.
+
+      Committed: `#{sha}` at #{ts} — Add file1
+      """
+
+      capture_io(fn -> CommitAnnotator.annotate_commits(work_dir, transcript) end)
+
+      msg = git(work_dir, ["log", "--format=%B", "-1"])
+      assert msg =~ "## Chat Transcript"
+      assert msg =~ "Please add file1"
+    end
+
+    @tag :tmp_dir
+    test "force mode scopes to branch commits, not entire repo history", %{work_dir: work_dir} do
+      # Create several commits on main and push them (simulating existing history)
+      for i <- 1..5 do
+        File.write!(Path.join(work_dir, "history#{i}.txt"), "history #{i}")
+        git(work_dir, ["add", "."])
+        git(work_dir, ["commit", "-m", "History commit #{i}"])
+      end
+      git(work_dir, ["push"])
+
+      # Create a feature branch with one commit and push it
+      git(work_dir, ["checkout", "-b", "feature/test"])
+      File.write!(Path.join(work_dir, "feature.txt"), "feature work")
+      git(work_dir, ["add", "."])
+      git(work_dir, ["commit", "-m", "Add feature"])
+      git(work_dir, ["push", "-u", "origin", "feature/test"])
+
+      # list_commits with force=true should only return the 1 branch commit,
+      # not the 6 main commits (initial + 5 history)
+      commits = CommitAnnotator.list_commits(work_dir, true)
+      assert length(commits) == 1
+      assert {_, "Add feature"} = hd(commits)
     end
   end
 end

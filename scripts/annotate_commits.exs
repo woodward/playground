@@ -107,10 +107,21 @@ defmodule CommitAnnotator do
   @doc """
   Lists commits as `{sha, subject}` tuples. When `force` is true, lists
   all commits; otherwise only unpushed commits relative to the upstream.
+  Falls back to `origin/main..HEAD` when the branch has no upstream.
   """
   def list_commits(repo_dir, force) do
-    log_range = if force, do: "HEAD", else: "@{u}..HEAD"
+    log_range = if force, do: "origin/main..HEAD", else: upstream_range(repo_dir)
+    parse_log(repo_dir, log_range)
+  end
 
+  defp upstream_range(repo_dir) do
+    case System.cmd("git", ["rev-parse", "--abbrev-ref", "@{u}"], cd: repo_dir, stderr_to_stdout: true) do
+      {_, 0} -> "@{u}..HEAD"
+      _ -> "origin/main..HEAD"
+    end
+  end
+
+  defp parse_log(repo_dir, log_range) do
     {log_output, exit_code} =
       System.cmd("git", ["log", "--format=%h %s", log_range], cd: repo_dir, stderr_to_stdout: true)
 
@@ -156,24 +167,29 @@ defmodule CommitAnnotator do
       File.write!(Path.join(tmp_dir, sha), annotation)
     end
 
-    # GIT_COMMIT holds the original full SHA; we take the first 7 chars
     msg_filter = """
-    sha=$(echo $GIT_COMMIT | cut -c1-7)
     msg=$(cat)
-    annotation_file="#{tmp_dir}/$sha"
-    if [ -f "$annotation_file" ]; then
+    matched=""
+    for f in "#{tmp_dir}"/*; do
+      [ -f "$f" ] || continue
+      abbrev=$(basename "$f")
+      case "$GIT_COMMIT" in
+        "$abbrev"*) matched="$f"; break ;;
+      esac
+    done
+    if [ -n "$matched" ]; then
       if echo "$msg" | grep -q '#{@annotation_marker}'; then
         echo "$msg"
       else
         echo "$msg"
-        cat "$annotation_file"
+        cat "$matched"
       fi
     else
       echo "$msg"
     fi
     """
 
-    filter_range = if force, do: "HEAD", else: "@{u}..HEAD"
+    filter_range = if force, do: "origin/main..HEAD", else: upstream_range(repo_dir)
 
     {output, exit_code} =
       System.cmd("git", ["filter-branch", "-f", "--msg-filter", msg_filter, filter_range],
