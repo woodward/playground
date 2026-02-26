@@ -7,6 +7,14 @@ defmodule AmendWithChat do
 
   import IO.ANSI
 
+  @marker_prefix "MARK"
+
+  def generate_marker do
+    now = DateTime.utc_now()
+    formatted = Calendar.strftime(now, "%Y-%m-%d %H:%M")
+    "#{@marker_prefix} - #{formatted}"
+  end
+
   def run(_opts) do
     IO.puts("Not yet implemented.")
   end
