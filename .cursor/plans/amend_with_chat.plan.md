@@ -4,37 +4,37 @@ overview: Build an Elixir script (amend_with_chat.exs) that amends the last git 
 todos:
   - id: gitignore
     content: Add .local/ to .gitignore
-    status: pending
+    status: completed
   - id: step1-marker-gen
     content: "TDD: generate_marker/0 — returns MARK - YYYY-MM-DD HH:MM"
-    status: pending
+    status: completed
   - id: step2-marker-io
     content: "TDD: read_marker/1 and write_marker/2 — file round-trip"
-    status: pending
+    status: completed
   - id: step3-trim
     content: "TDD: trim_transcript/2 — trim content before marker"
-    status: pending
+    status: completed
   - id: step4-build-msg
     content: "TDD: build_message/2 — combine commit message + divider + chat"
-    status: pending
+    status: completed
   - id: step5-idempotency
     content: "TDD: already_amended?/1 — detect existing chat section"
-    status: pending
+    status: completed
   - id: step6-init
     content: "TDD: --init flag integration"
-    status: pending
+    status: completed
   - id: step7-amend
     content: "TDD: full amend integration with tmp_dir repo"
-    status: pending
+    status: completed
   - id: step8-dry-run
     content: "TDD: --dry-run preview output"
-    status: pending
+    status: completed
   - id: step9-force
     content: "TDD: --force flag for pushed commits"
-    status: pending
+    status: completed
   - id: step10-idempotency-int
     content: "TDD: refuse second run on same commit"
-    status: pending
+    status: completed
 isProject: false
 ---
 
@@ -127,7 +127,7 @@ Each step: write failing test, implement, verify, commit.
 
 ## Files
 
-- [scripts/amend_with_chat.exs](scripts/amend_with_chat.exs) — main script (stub exists, needs rename)
-- [scripts/amend_with_chat_test.exs](scripts/amend_with_chat_test.exs) — tests (stub exists, needs rename)
-- `.gitignore` — add `.local/` entry
+- [scripts/amend_with_chat.exs](scripts/amend_with_chat.exs) — main script
+- [scripts/amend_with_chat_test.exs](scripts/amend_with_chat_test.exs) — 15 ExUnit tests
+- `.gitignore` — `.local/` entry added
 
