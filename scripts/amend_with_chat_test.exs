@@ -175,6 +175,54 @@ defmodule AmendWithChatTest do
       # Output should mention success
       assert output =~ "Amended"
     end
+
+    @tag :tmp_dir
+    test "dry run previews amended message without modifying commit", %{tmp_dir: tmp_dir} do
+      [work_dir: work_dir] = setup_repo(%{tmp_dir: tmp_dir})
+
+      marker = "MARK - 2026-02-25 17:34"
+      marker_path = Path.join(tmp_dir, "marker.txt")
+      AmendWithChat.write_marker(marker_path, marker)
+
+      transcript_path = Path.join(work_dir, "TRANSCRIPT.md")
+
+      chat_lines =
+        Enum.map(1..20, fn i -> "Line #{i} of the conversation." end)
+        |> Enum.join("\n")
+
+      File.write!(transcript_path, """
+      Old stuff.
+
+      #{marker}
+
+      #{chat_lines}
+      """)
+
+      output =
+        capture_io(fn ->
+          AmendWithChat.run(
+            file: transcript_path,
+            marker_path: marker_path,
+            work_dir: work_dir,
+            dry_run: true
+          )
+        end)
+
+      # Commit message should NOT have been modified
+      commit_msg = git(work_dir, ["log", "-1", "--format=%B"])
+      refute commit_msg =~ "## Chat Transcript"
+
+      # Marker file should NOT have been updated
+      {:ok, same_marker} = AmendWithChat.read_marker(marker_path)
+      assert same_marker == marker
+
+      # Output should show a preview
+      assert output =~ "dry run"
+      assert output =~ "Initial commit"
+      assert output =~ "Line 1 of the conversation"
+      assert output =~ "Line 20 of the conversation"
+      assert output =~ "20 chat lines"
+    end
   end
 
   describe "init/1" do

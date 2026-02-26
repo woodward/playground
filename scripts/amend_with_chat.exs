@@ -58,6 +58,7 @@ defmodule AmendWithChat do
     file = Keyword.fetch!(opts, :file)
     marker_path = Keyword.fetch!(opts, :marker_path)
     work_dir = Keyword.get(opts, :work_dir, ".")
+    dry_run = Keyword.get(opts, :dry_run, false)
 
     with {:ok, marker} <- read_marker(marker_path),
          {:ok, transcript} <- File.read(file),
@@ -70,19 +71,11 @@ defmodule AmendWithChat do
       if already_amended?(original_msg) do
         IO.puts(yellow() <> "Already amended — skipping." <> reset())
       else
-        new_msg = build_message(original_msg, chat)
-
-        {_output, 0} =
-          System.cmd("git", ["commit", "--amend", "-m", new_msg],
-            cd: work_dir,
-            stderr_to_stdout: true
-          )
-
-        new_marker = generate_marker()
-        write_marker(marker_path, new_marker)
-
-        IO.puts(green() <> "Amended commit with chat transcript." <> reset())
-        IO.puts("New marker: #{new_marker}")
+        if dry_run do
+          print_dry_run_preview(original_msg, chat)
+        else
+          amend_commit(original_msg, chat, work_dir, marker_path)
+        end
       end
     else
       {:error, :not_found} ->
@@ -94,6 +87,59 @@ defmodule AmendWithChat do
       {:error, reason} ->
         IO.puts(red() <> "Error reading transcript: #{inspect(reason)}" <> reset())
     end
+  end
+
+  defp amend_commit(original_msg, chat, work_dir, marker_path) do
+    new_msg = build_message(original_msg, chat)
+
+    {_output, 0} =
+      System.cmd("git", ["commit", "--amend", "-m", new_msg],
+        cd: work_dir,
+        stderr_to_stdout: true
+      )
+
+    new_marker = generate_marker()
+    write_marker(marker_path, new_marker)
+
+    IO.puts(green() <> "Amended commit with chat transcript." <> reset())
+    IO.puts("New marker: #{new_marker}")
+  end
+
+  defp print_dry_run_preview(original_msg, chat) do
+    desc_lines = String.split(original_msg, "\n")
+    chat_lines = String.split(chat, "\n")
+    chat_count = length(chat_lines)
+
+    IO.puts(cyan() <> bright() <> "dry run preview:" <> reset())
+    IO.puts("")
+
+    # Description bookend: first 3 lines
+    desc_lines
+    |> Enum.take(3)
+    |> Enum.each(&IO.puts(faint() <> "  " <> &1 <> reset()))
+
+    if length(desc_lines) > 3, do: IO.puts(faint() <> "  ..." <> reset())
+
+    IO.puts("")
+    IO.puts("  ---")
+    IO.puts("  " <> bright() <> "## Chat Transcript" <> reset())
+    IO.puts("")
+
+    # Chat bookend: first 3 lines
+    chat_lines
+    |> Enum.take(3)
+    |> Enum.each(&IO.puts(faint() <> "  " <> &1 <> reset()))
+
+    if chat_count > 6 do
+      IO.puts(faint() <> "  ..." <> reset())
+
+      chat_lines
+      |> Enum.take(-3)
+      |> Enum.each(&IO.puts(faint() <> "  " <> &1 <> reset()))
+    end
+
+    IO.puts("")
+    IO.puts(yellow() <> "#{chat_count} chat lines" <> reset() <> " would be appended.")
   end
 
   def usage do
