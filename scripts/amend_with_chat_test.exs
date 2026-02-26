@@ -79,4 +79,17 @@ defmodule AmendWithChatTest do
                AmendWithChat.trim_transcript(transcript, "MARK - 2026-02-25 17:34")
     end
   end
+
+  describe "build_message/2" do
+    test "combines commit message with divider and chat content" do
+      original = "Fix the login bug\n\nDetailed description of the fix."
+      chat = "**User**\n\nPlease fix the login bug\n\n---\n\n**Cursor**\n\nFixed it."
+
+      result = AmendWithChat.build_message(original, chat)
+
+      assert String.starts_with?(result, "Fix the login bug\n\nDetailed description of the fix.")
+      assert result =~ "\n\n---\n\n## Chat Transcript\n\n"
+      assert String.ends_with?(result, chat)
+    end
+  end
 end

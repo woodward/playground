@@ -27,6 +27,12 @@ defmodule AmendWithChat do
     end
   end
 
+  @annotation_marker "## Chat Transcript"
+
+  def build_message(original, chat) do
+    "#{original}\n\n---\n\n#{@annotation_marker}\n\n#{chat}"
+  end
+
   def trim_transcript(content, marker) do
     if String.contains?(content, marker) do
       content
