@@ -48,6 +48,12 @@ defmodule AmendWithChat do
     end
   end
 
+  def init(marker_path) do
+    marker = generate_marker()
+    write_marker(marker_path, marker)
+    IO.puts(marker)
+  end
+
   def run(_opts) do
     IO.puts("Not yet implemented.")
   end

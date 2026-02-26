@@ -2,6 +2,7 @@ ExUnit.start()
 
 defmodule AmendWithChatTest do
   use ExUnit.Case, async: true
+  import ExUnit.CaptureIO
 
   @marker_regex ~r/^MARK - \d{4}-\d{2}-\d{2} \d{2}:\d{2}$/
 
@@ -101,6 +102,25 @@ defmodule AmendWithChatTest do
       assert String.starts_with?(result, "Fix the login bug\n\nDetailed description of the fix.")
       assert result =~ "\n\n---\n\n## Chat Transcript\n\n"
       assert String.ends_with?(result, chat)
+    end
+  end
+
+  describe "init/1" do
+    @tag :tmp_dir
+    test "creates marker file and prints marker to screen", %{tmp_dir: tmp_dir} do
+      marker_path = Path.join([tmp_dir, ".local", "last_chat_marker.txt"])
+
+      output = capture_io(fn -> AmendWithChat.init(marker_path) end)
+
+      # Should print the marker to the screen
+      assert Regex.match?(@marker_regex, String.trim(output))
+
+      # Should write the marker to the file
+      assert {:ok, marker} = AmendWithChat.read_marker(marker_path)
+      assert Regex.match?(@marker_regex, marker)
+
+      # Printed marker and saved marker should match
+      assert String.trim(output) == marker
     end
   end
 end
