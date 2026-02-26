@@ -314,6 +314,54 @@ defmodule AmendWithChatTest do
       assert commit_msg =~ "## Chat Transcript"
       assert commit_msg =~ "Fixed it."
     end
+
+    @tag :tmp_dir
+    test "refuses to amend a commit that was already amended", %{tmp_dir: tmp_dir} do
+      [work_dir: work_dir] = setup_repo(%{tmp_dir: tmp_dir})
+
+      marker = "MARK - 2026-02-25 17:34"
+      {transcript_path, marker_path} = write_transcript(tmp_dir, work_dir, marker)
+
+      # First run should succeed
+      first_output =
+        capture_io(fn ->
+          AmendWithChat.run(
+            file: transcript_path,
+            marker_path: marker_path,
+            work_dir: work_dir
+          )
+        end)
+
+      assert first_output =~ "Amended"
+
+      # Read the new marker that was written, and put it into the transcript
+      {:ok, new_marker} = AmendWithChat.read_marker(marker_path)
+
+      File.write!(transcript_path, """
+      #{new_marker}
+
+      **User**
+
+      Another question.
+      """)
+
+      # Second run should refuse
+      second_output =
+        capture_io(fn ->
+          AmendWithChat.run(
+            file: transcript_path,
+            marker_path: marker_path,
+            work_dir: work_dir
+          )
+        end)
+
+      assert second_output =~ "Already amended"
+
+      # Commit should still have original chat, not the new one
+      commit_msg = git(work_dir, ["log", "-1", "--format=%B"])
+      assert commit_msg =~ "Fixed it."
+      refute commit_msg =~ "Another question."
+    end
   end
 
   describe "init/1" do
