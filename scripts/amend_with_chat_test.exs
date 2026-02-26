@@ -124,6 +124,47 @@ defmodule AmendWithChatTest do
       [work_dir: work_dir]
     end
 
+    defp setup_repo_with_remote(%{tmp_dir: tmp_dir}) do
+      bare_dir = Path.join(tmp_dir, "remote.git")
+      work_dir = Path.join(tmp_dir, "repo")
+
+      System.cmd("git", ["init", "--bare", bare_dir])
+      System.cmd("git", ["clone", bare_dir, work_dir], stderr_to_stdout: true)
+      git(work_dir, ["config", "user.email", "test@test.com"])
+      git(work_dir, ["config", "user.name", "Test User"])
+
+      File.write!(Path.join(work_dir, "README.md"), "# Test")
+      git(work_dir, ["add", "."])
+      git(work_dir, ["commit", "-m", "Initial commit"])
+      git(work_dir, ["push", "-u", "origin", "HEAD"])
+
+      [work_dir: work_dir]
+    end
+
+    defp write_transcript(tmp_dir, work_dir, marker) do
+      transcript_path = Path.join(work_dir, "TRANSCRIPT.md")
+      marker_path = Path.join(tmp_dir, "marker.txt")
+      AmendWithChat.write_marker(marker_path, marker)
+
+      File.write!(transcript_path, """
+      Old stuff.
+
+      #{marker}
+
+      **User**
+
+      Please fix the bug.
+
+      ---
+
+      **Cursor**
+
+      Fixed it.
+      """)
+
+      {transcript_path, marker_path}
+    end
+
     @tag :tmp_dir
     test "amends last commit with trimmed chat content", %{tmp_dir: tmp_dir} do
       [work_dir: work_dir] = setup_repo(%{tmp_dir: tmp_dir})
@@ -222,6 +263,56 @@ defmodule AmendWithChatTest do
       assert output =~ "Line 1 of the conversation"
       assert output =~ "Line 20 of the conversation"
       assert output =~ "20 chat lines"
+    end
+
+    @tag :tmp_dir
+    test "refuses to amend a pushed commit by default", %{tmp_dir: tmp_dir} do
+      [work_dir: work_dir] = setup_repo_with_remote(%{tmp_dir: tmp_dir})
+
+      marker = "MARK - 2026-02-25 17:34"
+      {transcript_path, marker_path} = write_transcript(tmp_dir, work_dir, marker)
+
+      output =
+        capture_io(fn ->
+          AmendWithChat.run(
+            file: transcript_path,
+            marker_path: marker_path,
+            work_dir: work_dir
+          )
+        end)
+
+      # Should refuse
+      assert output =~ "already pushed"
+
+      # Commit should NOT have been modified
+      commit_msg = git(work_dir, ["log", "-1", "--format=%B"])
+      refute commit_msg =~ "## Chat Transcript"
+    end
+
+    @tag :tmp_dir
+    test "force flag allows amending a pushed commit", %{tmp_dir: tmp_dir} do
+      [work_dir: work_dir] = setup_repo_with_remote(%{tmp_dir: tmp_dir})
+
+      marker = "MARK - 2026-02-25 17:34"
+      {transcript_path, marker_path} = write_transcript(tmp_dir, work_dir, marker)
+
+      output =
+        capture_io(fn ->
+          AmendWithChat.run(
+            file: transcript_path,
+            marker_path: marker_path,
+            work_dir: work_dir,
+            force: true
+          )
+        end)
+
+      # Should succeed
+      assert output =~ "Amended"
+
+      # Commit should have been modified
+      commit_msg = git(work_dir, ["log", "-1", "--format=%B"])
+      assert commit_msg =~ "## Chat Transcript"
+      assert commit_msg =~ "Fixed it."
     end
   end
 

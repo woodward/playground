@@ -59,6 +59,7 @@ defmodule AmendWithChat do
     marker_path = Keyword.fetch!(opts, :marker_path)
     work_dir = Keyword.get(opts, :work_dir, ".")
     dry_run = Keyword.get(opts, :dry_run, false)
+    force = Keyword.get(opts, :force, false)
 
     with {:ok, marker} <- read_marker(marker_path),
          {:ok, transcript} <- File.read(file),
@@ -68,14 +69,19 @@ defmodule AmendWithChat do
 
       original_msg = String.trim(original_msg)
 
-      if already_amended?(original_msg) do
-        IO.puts(yellow() <> "Already amended — skipping." <> reset())
-      else
-        if dry_run do
+      cond do
+        already_amended?(original_msg) ->
+          IO.puts(yellow() <> "Already amended — skipping." <> reset())
+
+        !force and head_pushed?(work_dir) ->
+          IO.puts(yellow() <> "HEAD is already pushed to remote. Use --force to amend anyway." <> reset())
+
+        dry_run ->
           print_dry_run_preview(original_msg, chat)
-        else
+
+        true ->
+          if force, do: IO.puts(yellow() <> "Warning: amending a pushed commit." <> reset())
           amend_commit(original_msg, chat, work_dir, marker_path)
-        end
       end
     else
       {:error, :not_found} ->
@@ -86,6 +92,17 @@ defmodule AmendWithChat do
 
       {:error, reason} ->
         IO.puts(red() <> "Error reading transcript: #{inspect(reason)}" <> reset())
+    end
+  end
+
+  defp head_pushed?(work_dir) do
+    case System.cmd("git", ["rev-parse", "--abbrev-ref", "@{u}"], cd: work_dir, stderr_to_stdout: true) do
+      {_upstream, 0} ->
+        {output, _} = System.cmd("git", ["log", "@{u}..HEAD", "--oneline"], cd: work_dir, stderr_to_stdout: true)
+        String.trim(output) == ""
+
+      _ ->
+        false
     end
   end
 
