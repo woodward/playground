@@ -1,8 +1,8 @@
 #!/usr/bin/env elixir
 
-defmodule AddChatToCommit do
+defmodule AmendWithChat do
   @moduledoc """
-  Adds chat transcript context to git commit messages.
+  Amends the last git commit with chat transcript context.
   """
 
   import IO.ANSI
@@ -14,11 +14,11 @@ defmodule AddChatToCommit do
   def usage do
     IO.puts("""
 
-    #{cyan() <> bright()}Add Chat to Commit#{reset()} #{faint()}—#{reset()} attach chat context to commit messages
+    #{cyan() <> bright()}Amend With Chat#{reset()} #{faint()}—#{reset()} amend last commit with chat transcript context
 
     #{green() <> bright()}USAGE#{reset()}
-      #{cyan()}./scripts/add_chat_to_commit.exs#{reset()} #{yellow()}--test#{reset()}    #{faint()}# run self-tests#{reset()}
-      #{cyan()}./scripts/add_chat_to_commit.exs#{reset()} #{yellow()}--help#{reset()}    #{faint()}# show this help#{reset()}
+      #{cyan()}./scripts/amend_with_chat.exs#{reset()} #{yellow()}--test#{reset()}    #{faint()}# run self-tests#{reset()}
+      #{cyan()}./scripts/amend_with_chat.exs#{reset()} #{yellow()}--help#{reset()}    #{faint()}# show this help#{reset()}
 
     #{green() <> bright()}OPTIONS#{reset()}
       #{yellow()}--test#{reset()}    Run ExUnit tests
@@ -46,8 +46,8 @@ cond do
     end
 
   opts[:help] ->
-    AddChatToCommit.usage()
+    AmendWithChat.usage()
 
   true ->
-    AddChatToCommit.usage()
+    AmendWithChat.usage()
 end
