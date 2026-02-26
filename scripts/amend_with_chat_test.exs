@@ -80,6 +80,17 @@ defmodule AmendWithChatTest do
     end
   end
 
+  describe "already_amended?/1" do
+    test "returns true when message contains chat transcript marker" do
+      message = "Fix a bug\n\n---\n\n## Chat Transcript\n\nSome chat here"
+      assert AmendWithChat.already_amended?(message)
+    end
+
+    test "returns false for a plain commit message" do
+      refute AmendWithChat.already_amended?("Fix a bug\n\nJust a normal description")
+    end
+  end
+
   describe "build_message/2" do
     test "combines commit message with divider and chat content" do
       original = "Fix the login bug\n\nDetailed description of the fix."
