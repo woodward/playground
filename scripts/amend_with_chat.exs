@@ -54,8 +54,46 @@ defmodule AmendWithChat do
     IO.puts(marker)
   end
 
-  def run(_opts) do
-    IO.puts("Not yet implemented.")
+  def run(opts) do
+    file = Keyword.fetch!(opts, :file)
+    marker_path = Keyword.fetch!(opts, :marker_path)
+    work_dir = Keyword.get(opts, :work_dir, ".")
+
+    with {:ok, marker} <- read_marker(marker_path),
+         {:ok, transcript} <- File.read(file),
+         chat when is_binary(chat) <- trim_transcript(transcript, marker) do
+      {original_msg, 0} =
+        System.cmd("git", ["log", "-1", "--format=%B"], cd: work_dir, stderr_to_stdout: true)
+
+      original_msg = String.trim(original_msg)
+
+      if already_amended?(original_msg) do
+        IO.puts(yellow() <> "Already amended — skipping." <> reset())
+      else
+        new_msg = build_message(original_msg, chat)
+
+        {_output, 0} =
+          System.cmd("git", ["commit", "--amend", "-m", new_msg],
+            cd: work_dir,
+            stderr_to_stdout: true
+          )
+
+        new_marker = generate_marker()
+        write_marker(marker_path, new_marker)
+
+        IO.puts(green() <> "Amended commit with chat transcript." <> reset())
+        IO.puts("New marker: #{new_marker}")
+      end
+    else
+      {:error, :not_found} ->
+        IO.puts(red() <> "Error: marker file not found. Run with --init first." <> reset())
+
+      {:error, :marker_not_found} ->
+        IO.puts(red() <> "Error: marker not found in transcript." <> reset())
+
+      {:error, reason} ->
+        IO.puts(red() <> "Error reading transcript: #{inspect(reason)}" <> reset())
+    end
   end
 
   def usage do

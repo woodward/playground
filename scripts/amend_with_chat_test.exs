@@ -105,6 +105,78 @@ defmodule AmendWithChatTest do
     end
   end
 
+  describe "run/1 integration" do
+    defp git(repo_dir, args) do
+      {output, 0} = System.cmd("git", args, cd: repo_dir, stderr_to_stdout: true)
+      String.trim(output)
+    end
+
+    defp setup_repo(%{tmp_dir: tmp_dir}) do
+      work_dir = Path.join(tmp_dir, "repo")
+      System.cmd("git", ["init", work_dir])
+      git(work_dir, ["config", "user.email", "test@test.com"])
+      git(work_dir, ["config", "user.name", "Test User"])
+
+      File.write!(Path.join(work_dir, "README.md"), "# Test")
+      git(work_dir, ["add", "."])
+      git(work_dir, ["commit", "-m", "Initial commit"])
+
+      [work_dir: work_dir]
+    end
+
+    @tag :tmp_dir
+    test "amends last commit with trimmed chat content", %{tmp_dir: tmp_dir} do
+      [work_dir: work_dir] = setup_repo(%{tmp_dir: tmp_dir})
+
+      marker = "MARK - 2026-02-25 17:34"
+      marker_path = Path.join(tmp_dir, "marker.txt")
+      AmendWithChat.write_marker(marker_path, marker)
+
+      transcript_path = Path.join(work_dir, "TRANSCRIPT.md")
+
+      File.write!(transcript_path, """
+      Old conversation before the marker.
+
+      #{marker}
+
+      **User**
+
+      Please fix the login bug
+
+      ---
+
+      **Cursor**
+
+      Fixed the login bug by updating the auth module.
+      """)
+
+      output =
+        capture_io(fn ->
+          AmendWithChat.run(
+            file: transcript_path,
+            marker_path: marker_path,
+            work_dir: work_dir
+          )
+        end)
+
+      # The commit message should now contain the chat content
+      commit_msg = git(work_dir, ["log", "-1", "--format=%B"])
+      assert commit_msg =~ "Initial commit"
+      assert commit_msg =~ "## Chat Transcript"
+      assert commit_msg =~ "Please fix the login bug"
+      assert commit_msg =~ "Fixed the login bug by updating the auth module."
+      refute commit_msg =~ "Old conversation before the marker"
+
+      # A new marker should be written to the marker file
+      {:ok, new_marker} = AmendWithChat.read_marker(marker_path)
+      assert Regex.match?(~r/^MARK - \d{4}-\d{2}-\d{2} \d{2}:\d{2}$/, new_marker)
+      assert new_marker != marker
+
+      # Output should mention success
+      assert output =~ "Amended"
+    end
+  end
+
   describe "init/1" do
     @tag :tmp_dir
     test "creates marker file and prints marker to screen", %{tmp_dir: tmp_dir} do
