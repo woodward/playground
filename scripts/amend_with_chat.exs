@@ -159,18 +159,30 @@ defmodule AmendWithChat do
     IO.puts(yellow() <> "#{chat_count} chat lines" <> reset() <> " would be appended.")
   end
 
+  @default_marker_path ".local/last_chat_marker.txt"
+
+  def default_marker_path, do: @default_marker_path
+
   def usage do
     IO.puts("""
 
     #{cyan() <> bright()}Amend With Chat#{reset()} #{faint()}—#{reset()} amend last commit with chat transcript context
 
     #{green() <> bright()}USAGE#{reset()}
-      #{cyan()}./scripts/amend_with_chat.exs#{reset()} #{yellow()}--test#{reset()}    #{faint()}# run self-tests#{reset()}
-      #{cyan()}./scripts/amend_with_chat.exs#{reset()} #{yellow()}--help#{reset()}    #{faint()}# show this help#{reset()}
+      #{cyan()}./scripts/amend_with_chat.exs#{reset()} #{yellow()}--file#{reset()} TRANSCRIPT.md              #{faint()}# amend HEAD#{reset()}
+      #{cyan()}./scripts/amend_with_chat.exs#{reset()} #{yellow()}--file#{reset()} TRANSCRIPT.md #{yellow()}--dry-run#{reset()}    #{faint()}# preview only#{reset()}
+      #{cyan()}./scripts/amend_with_chat.exs#{reset()} #{yellow()}--file#{reset()} TRANSCRIPT.md #{yellow()}--force#{reset()}      #{faint()}# amend even if pushed#{reset()}
+      #{cyan()}./scripts/amend_with_chat.exs#{reset()} #{yellow()}--init#{reset()}                             #{faint()}# bootstrap marker file#{reset()}
+      #{cyan()}./scripts/amend_with_chat.exs#{reset()} #{yellow()}--test#{reset()}                             #{faint()}# run self-tests#{reset()}
+      #{cyan()}./scripts/amend_with_chat.exs#{reset()} #{yellow()}--help#{reset()}                             #{faint()}# show this help#{reset()}
 
     #{green() <> bright()}OPTIONS#{reset()}
-      #{yellow()}--test#{reset()}    Run ExUnit tests
-      #{yellow()}--help#{reset()}    Show this help message
+      #{yellow()}--file#{reset()} FILE    Path to the exported chat transcript #{red()}(required for amend)#{reset()}
+      #{yellow()}--dry-run#{reset()}      Preview the amended message without modifying the commit
+      #{yellow()}--force#{reset()}        Allow amending commits already pushed to remote
+      #{yellow()}--init#{reset()}         Generate a new marker and save to #{faint()}#{@default_marker_path}#{reset()}
+      #{yellow()}--test#{reset()}         Run ExUnit tests
+      #{yellow()}--help#{reset()}         Show this help message
     """)
   end
 end
@@ -178,7 +190,16 @@ end
 # --------------------------------------------------------------------------------------------------
 
 {opts, _args, _invalid} =
-  OptionParser.parse(System.argv(), switches: [test: :boolean, help: :boolean])
+  OptionParser.parse(System.argv(),
+    switches: [
+      test: :boolean,
+      help: :boolean,
+      init: :boolean,
+      file: :string,
+      dry_run: :boolean,
+      force: :boolean
+    ]
+  )
 
 script_path = __ENV__.file
 test_file = String.replace_trailing(script_path, ".exs", "_test.exs")
@@ -195,6 +216,17 @@ cond do
 
   opts[:help] ->
     AmendWithChat.usage()
+
+  opts[:init] ->
+    AmendWithChat.init(AmendWithChat.default_marker_path())
+
+  opts[:file] ->
+    AmendWithChat.run(
+      file: opts[:file],
+      marker_path: AmendWithChat.default_marker_path(),
+      dry_run: opts[:dry_run] || false,
+      force: opts[:force] || false
+    )
 
   true ->
     AmendWithChat.usage()

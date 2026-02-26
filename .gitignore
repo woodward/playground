@@ -35,3 +35,6 @@ playground-*.tar
 npm-debug.log
 /assets/node_modules/
 
+# Local user-specific files (markers, settings, etc.)
+/.local/
+
