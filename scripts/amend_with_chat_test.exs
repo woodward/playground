@@ -17,4 +17,21 @@ defmodule AmendWithChatTest do
       assert String.contains?(marker, today)
     end
   end
+
+  describe "marker file I/O" do
+    @tag :tmp_dir
+    test "write_marker then read_marker round-trips", %{tmp_dir: tmp_dir} do
+      path = Path.join(tmp_dir, "last_chat_marker.txt")
+      marker = "MARK - 2026-02-26 11:30"
+
+      AmendWithChat.write_marker(path, marker)
+      assert {:ok, ^marker} = AmendWithChat.read_marker(path)
+    end
+
+    @tag :tmp_dir
+    test "read_marker returns error when file does not exist", %{tmp_dir: tmp_dir} do
+      path = Path.join(tmp_dir, "nonexistent.txt")
+      assert {:error, :not_found} = AmendWithChat.read_marker(path)
+    end
+  end
 end

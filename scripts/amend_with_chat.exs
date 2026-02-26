@@ -15,6 +15,18 @@ defmodule AmendWithChat do
     "#{@marker_prefix} - #{formatted}"
   end
 
+  def write_marker(path, marker) do
+    path |> Path.dirname() |> File.mkdir_p!()
+    File.write!(path, marker)
+  end
+
+  def read_marker(path) do
+    case File.read(path) do
+      {:ok, content} -> {:ok, String.trim(content)}
+      {:error, :enoent} -> {:error, :not_found}
+    end
+  end
+
   def run(_opts) do
     IO.puts("Not yet implemented.")
   end
