@@ -27,6 +27,17 @@ defmodule AmendWithChat do
     end
   end
 
+  def trim_transcript(content, marker) do
+    if String.contains?(content, marker) do
+      content
+      |> String.split(marker, parts: 2)
+      |> List.last()
+      |> String.trim()
+    else
+      {:error, :marker_not_found}
+    end
+  end
+
   def run(_opts) do
     IO.puts("Not yet implemented.")
   end

@@ -34,4 +34,49 @@ defmodule AmendWithChatTest do
       assert {:error, :not_found} = AmendWithChat.read_marker(path)
     end
   end
+
+  describe "trim_transcript/2" do
+    test "returns content after the marker line" do
+      transcript = """
+      Old conversation before the marker.
+
+      ---
+
+      **User**
+
+      Some old question
+
+      MARK - 2026-02-25 17:34
+
+      **User**
+
+      Please fix the login bug
+
+      ---
+
+      **Cursor**
+
+      Fixed the login bug.
+      """
+
+      result = AmendWithChat.trim_transcript(transcript, "MARK - 2026-02-25 17:34")
+
+      refute result =~ "Old conversation"
+      refute result =~ "Some old question"
+      refute result =~ "MARK - 2026-02-25 17:34"
+      assert result =~ "Please fix the login bug"
+      assert result =~ "Fixed the login bug."
+    end
+
+    test "returns error when marker is not found in transcript" do
+      transcript = """
+      **User**
+
+      Some conversation with no marker.
+      """
+
+      assert {:error, :marker_not_found} =
+               AmendWithChat.trim_transcript(transcript, "MARK - 2026-02-25 17:34")
+    end
+  end
 end
